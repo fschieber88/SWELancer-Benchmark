@@ -34,7 +34,7 @@ async def main() -> None:
                 experimental_use_multiprocessing=True,
                 enable_slackbot=False,
                 recorder=dummy_recorder(),
-                max_retries=5
+                max_retries=0
             ),
         )
     )
