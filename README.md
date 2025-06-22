@@ -193,3 +193,67 @@ We include the following utilities to facilitate future research:
 ## SWELancer-Lite 
 
 If you'd like to run SWELancer-Lite, swap out `swelancer_tasks.csv` with `swelancer_tasks_lite.csv` in `swelancer.py`. The lite dataset contains 174 tasks each worth over $1,000 (61 IC SWE tasks and 113 SWE Manager tasks). 
+
+## Runtime Logs & Observability
+
+The evaluator now produces two kinds of per-run log files in the `container_logs/` folder:
+
+1. **`<questionId>_<attempt>.live.log`** – live stream of `docker logs -f` for the
+   main container, captured **while the task is running**.  You can watch it in
+   another terminal:
+
+   ```bash
+   tail -f container_logs/*live.log | cut -c1-200  # truncate wide lines if you like
+   ```
+
+2. **`<questionId>_<attempt>.log`** – static file written after the run finishes.
+   It contains, in order:
+   • complete container stdout/stderr (same content as the live file but final)
+   • output from `/app/navigator/main.py` (the agent entry-point)
+   • **task snapshot** – human-readable list of every Navigator task grouped by
+     status, including the full context/description lines.  Example snippet:
+
+   ```text
+   ===== tasks snapshot =====
+   READY (0)
+
+   DONE (1)
+     - 1864a55d | Root: Fix flaky Chromium test 54864
+         > You are an expert software engineer…
+   ===== end =====
+   ```
+
+Why two files?  The live log is great for real-time debugging; the static file
+adds extra metadata (grade, task tree) and is guaranteed to be flushed before
+the evaluator exits.
+
+### Where does the data come from?
+
+• `navigator_solver.py` starts a background `docker logs -f` process as soon as
+  the container launches, piping the bytes into the live file.
+• After grading, the solver executes:
+
+  ```bash
+  python /app/navigator-agent/task_cli.py list --all --context
+  ```
+
+  inside the container to capture the full task registry.  That output is
+  appended to the static log.
+
+### Pro-tips
+
+• Grep across logs for stack traces or specific task ids:
+
+  ```bash
+  grep -R "ERR_TUNNEL_CONNECTION_FAILED" container_logs/
+  ```
+
+• Delete logs between large runs if disk space is tight:
+
+  ```bash
+  rm container_logs/*.log container_logs/*.live.log
+  ```
+
+These simple files give you immediate visibility; you can later feed them into
+`less +F`, Grafana Loki, or any log-aggregation stack without changing the
+solver. 
